@@ -1,10 +1,13 @@
 '''Veracode API endpoints'''
 
+from concurrent.futures import as_completed
 import requests
 from veracode_api_signing.plugin_requests import RequestsAuthPluginVeracodeHMAC
+from requests_futures.sessions import FuturesSession
 
 
 BASE_URL = "https://api.veracode.com/appsec"
+PAGE_SIZE = 500
 
 
 def call_url(url):
@@ -20,18 +23,27 @@ def call_url(url):
 
 def iterate_endpoint(object_key, start_url):
     '''Iterate an endpoint to get all objects'''
+    if "?" in start_url:
+        suffix_format_string = "&size={}&page={}"
+    else:
+        suffix_format_string = "?size={}&page={}"
     all_objects = []
-    objects = call_url(start_url)
+    objects = call_url(start_url + suffix_format_string.format(PAGE_SIZE, 0))
     all_objects.extend(objects.get("_embedded", {}).get(object_key, []))
-    while objects["_links"].get("next"):
-        objects = call_url(objects["_links"].get("next").get("href"))
-        all_objects.extend(objects.get("_embedded", {}).get(object_key, []))
+
+    with FuturesSession(max_workers=3) as session:
+        session.auth = RequestsAuthPluginVeracodeHMAC()
+        futures = [session.get(start_url + suffix_format_string.format(PAGE_SIZE, i)) for i in range(1, objects["page"]["total_pages"])]
+        for future in as_completed(futures):
+            response = future.result()
+            objects = response.json().get("_embedded", {}).get(object_key, [])
+            all_objects.extend(objects)
+
     return all_objects
 
 def get_applications():
     '''Get all applications'''
-    page_size = 500
-    start_url = f"{BASE_URL}/v1/applications?size={page_size}"
+    start_url = f"{BASE_URL}/v1/applications"
     return iterate_endpoint("applications", start_url)
 
 def get_sandboxes(application_guid):
@@ -41,8 +53,7 @@ def get_sandboxes(application_guid):
 
 def get_findings(application_guid, sandbox_guid=None):
     '''Get all findings'''
-    page_size = 500
-    start_url = f"{BASE_URL}/v2/applications/{application_guid}/findings?size={page_size}&scan_type=static"
+    start_url = f"{BASE_URL}/v2/applications/{application_guid}/findings?scan_type=static"
     if sandbox_guid is not None:
         start_url = f"{start_url}&context={sandbox_guid}"
     return iterate_endpoint("findings", start_url)
