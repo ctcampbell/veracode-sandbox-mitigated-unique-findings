@@ -24,13 +24,14 @@ def iterate_endpoint(object_key, start_url):
     objects = call_url(start_url)
     all_objects.extend(objects.get("_embedded", {}).get(object_key, []))
     while objects["_links"].get("next"):
-        objects = call_url(objects["_links"].get("next"))
+        objects = call_url(objects["_links"].get("next").get("href"))
         all_objects.extend(objects.get("_embedded", {}).get(object_key, []))
     return all_objects
 
 def get_applications():
     '''Get all applications'''
-    start_url = f"{BASE_URL}/v1/applications"
+    page_size = 500
+    start_url = f"{BASE_URL}/v1/applications?size={page_size}"
     return iterate_endpoint("applications", start_url)
 
 def get_sandboxes(application_guid):
