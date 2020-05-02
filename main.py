@@ -10,13 +10,6 @@ RESOLUTION_STATUSES = ["PROPOSED", "APPROVED", "REJECTED"]
 
 
 if __name__ == "__main__":
-    def write_message(message):
-        '''Write to file or console'''
-        try:
-            output_file.write(message + "\n")
-        except NameError:
-            print(message)
-
     def process_application(application):
         '''Return application if it contains mitigated unique findings'''
         # Get all findings
@@ -51,34 +44,28 @@ if __name__ == "__main__":
                 application["sandboxes"][sandbox_guid]["single_occurrence_findings"].append(finding)
             return application
 
-    def write_result(application):
-        '''Output results'''
-        write_message(f"\rApplication Profile: {application['profile']['name']}")
-        for sandbox in application["sandboxes"].values():
-            if len(sandbox["single_occurrence_findings"]) != 0:
-                write_message(f"\tSandbox: {sandbox['name']}")
-                write_message(f"\t\tSingle occurrence mitigated findings count: {len(sandbox['single_occurrence_findings'])}")
+    if len(sys.argv) != 2:
+        print("No CSV output file name provided. Usage: main.py <filename>")
+        sys.exit(1)
 
-    if len(sys.argv) == 2:
-         output_file = open(sys.argv[1], "w")
+    with open(sys.argv[1], "w", buffering=1) as output_file:
+        output_file.write("Application,Sandbox,Unique Mitigated Finding Count\n")
 
-    pool = ThreadPoolExecutor(5)
-    futures = []
-    counter = 0
+        pool = ThreadPoolExecutor(10)
+        futures = []
+        counter = 0
 
-    applications = api.get_applications()
-    for application in applications:
-        futures.append(pool.submit(process_application, application))
+        applications = api.get_applications()
+        for application in applications:
+            futures.append(pool.submit(process_application, application))
 
-    for future in as_completed(futures):
-        application = future.result()
-        if application is not None:
-            write_result(application)
-        counter += 1
-        print(f"\rApplications processed: {counter}", end="")
+        for future in as_completed(futures):
+            application = future.result()
+            if application is not None:
+                for sandbox in application["sandboxes"].values():
+                    if len(sandbox["single_occurrence_findings"]) != 0:
+                        output_file.write(f"{application['profile']['name']},{sandbox['name']},{len(sandbox['single_occurrence_findings'])}\n")
+            counter += 1
+            print(f"\rApplications processed: {counter}", end="")
 
-    try:
-        output_file.close()
-    except NameError:
-        pass
     print()

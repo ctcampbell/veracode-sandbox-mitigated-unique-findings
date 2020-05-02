@@ -31,7 +31,7 @@ def iterate_endpoint(object_key, start_url):
     objects = call_url(start_url + suffix_format_string.format(PAGE_SIZE, 0))
     all_objects.extend(objects.get("_embedded", {}).get(object_key, []))
 
-    with FuturesSession(max_workers=3) as session:
+    with FuturesSession(max_workers=2) as session:
         session.auth = RequestsAuthPluginVeracodeHMAC()
         futures = [session.get(start_url + suffix_format_string.format(PAGE_SIZE, i)) for i in range(1, objects["page"]["total_pages"])]
         for future in as_completed(futures):
