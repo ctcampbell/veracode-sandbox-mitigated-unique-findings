@@ -19,7 +19,7 @@ def call_url(url):
             print("There was an authentication error when calling the Veracode API.")
             print("Have you checked your credentials? https://help.veracode.com/go/c_api_credentials3")
         raise requests.HTTPError
-    return response.json()
+    return response
 
 def iterate_endpoint(object_key, start_url):
     '''Iterate an endpoint to get all objects'''
@@ -28,7 +28,8 @@ def iterate_endpoint(object_key, start_url):
     else:
         suffix_format_string = "?size={}&page={}"
     all_objects = []
-    objects = call_url(start_url + suffix_format_string.format(PAGE_SIZE, 0))
+    response = call_url(start_url + suffix_format_string.format(PAGE_SIZE, 0))
+    objects = response.json()
     all_objects.extend(objects.get("_embedded", {}).get(object_key, []))
 
     with FuturesSession(max_workers=2) as session:
@@ -36,8 +37,8 @@ def iterate_endpoint(object_key, start_url):
         futures = [session.get(start_url + suffix_format_string.format(PAGE_SIZE, i)) for i in range(1, objects["page"]["total_pages"])]
         for future in as_completed(futures):
             response = future.result()
-            objects = response.json().get("_embedded", {}).get(object_key, [])
-            all_objects.extend(objects)
+            objects = response.json()
+            all_objects.extend(objects.get("_embedded", {}).get(object_key, []))
 
     return all_objects
 

@@ -43,32 +43,33 @@ def process_application(application):
             application["sandboxes"][sandbox_guid]["unique_findings"].append(finding)
         return application
 
+    return None
+
 
 def main():
     '''Main method'''
-    if len(sys.argv) != 2:
-        print("No CSV output file name provided. Usage: main.py <filename>")
-        sys.exit(1)
+    pool = ThreadPoolExecutor(10)
 
-    with open(sys.argv[1], "w", buffering=1) as output_file:
-        output_file.write("Application,Sandbox,Unique Mitigated Finding Count\n")
+    try:
+        if len(sys.argv) != 2:
+            print("No CSV output file name provided. Usage: main.py <filename>")
+            sys.exit(1)
 
-        pool = ThreadPoolExecutor(10)
-        futures = []
-        counter = 0
-
-        applications = api.get_applications()
-        for application in applications:
-            futures.append(pool.submit(process_application, application))
-
-        for future in as_completed(futures):
-            application = future.result()
-            if application is not None:
-                for sandbox in application["sandboxes"].values():
-                    if len(sandbox["unique_findings"]) != 0:
-                        output_file.write(f"{application['profile']['name']},{sandbox['name']},{len(sandbox['unique_findings'])}\n")
-            counter += 1
-            print(f"\rApplications processed: {counter}", end="")
+        with open(sys.argv[1], "w", buffering=1) as output_file:
+            output_file.write("Application,Sandbox,Unique Mitigated Finding Count\n")
+            counter = 0
+            applications = api.get_applications()
+            futures = [pool.submit(process_application, x) for x in applications]
+            for future in as_completed(futures):
+                application = future.result()
+                if application is not None:
+                    for sandbox in application["sandboxes"].values():
+                        if len(sandbox["unique_findings"]) != 0:
+                            output_file.write(f"{application['profile']['name']},{sandbox['name']},{len(sandbox['unique_findings'])}\n")
+                counter += 1
+                print(f"\rApplications processed: {counter}", end="")
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
