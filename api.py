@@ -1,6 +1,7 @@
 '''Veracode API endpoints'''
 
 from concurrent.futures import as_completed
+import xml.etree.ElementTree as ET
 import requests
 from veracode_api_signing.plugin_requests import RequestsAuthPluginVeracodeHMAC
 from requests_futures.sessions import FuturesSession
@@ -58,3 +59,8 @@ def get_findings(application_guid, sandbox_guid=None):
     if sandbox_guid is not None:
         start_url = f"{start_url}&context={sandbox_guid}"
     return iterate_endpoint("findings", start_url)
+
+def get_sandbox_list(app_id):
+    '''Get sandbox list for an app'''
+    sandbox_list_xml = call_url(f"https://analysiscenter.veracode.com/api/5.0/getsandboxlist.do?app_id={app_id}").text
+    return ET.fromstring(sandbox_list_xml)

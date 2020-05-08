@@ -9,14 +9,6 @@ import api
 RESOLUTION_STATUSES = ["PROPOSED", "APPROVED", "REJECTED"]
 
 
-def get_finding_status(finding):
-    '''Return the status object for the finding'''
-    return list(finding["finding_status"].values())[0]
-
-def get_finding_sandbox_guid(finding):
-    '''Return the guid of the sandbox where the finding was found'''
-    return list(finding["finding_status"])[0]
-
 def process_application(application):
     '''Return application if it contains mitigated unique findings'''
     # Get all findings
@@ -28,19 +20,18 @@ def process_application(application):
         application["sandboxes"][sandbox["guid"]] = sandbox
         all_findings.extend(api.get_findings(application["guid"], sandbox["guid"]))
 
-    mitigated_findings = [x for x in all_findings if get_finding_status(x)["resolution_status"] in RESOLUTION_STATUSES]
+    mitigated_findings = [x for x in all_findings if x["finding_status"]["resolution_status"] in RESOLUTION_STATUSES]
 
     # Find single occurence mitigated findings
     finding_counter = Counter()
     for finding in mitigated_findings:
         finding_counter[finding["issue_id"]] += 1
     unique_mitigated_findings = [x for x in mitigated_findings if (finding_counter[x["issue_id"]] == 1 and
-                                                                   get_finding_sandbox_guid(x) != application["guid"])]
+                                                                   x["context_guid"] != application["guid"])]
 
     if len(unique_mitigated_findings) != 0:
         for finding in unique_mitigated_findings:
-            sandbox_guid = get_finding_sandbox_guid(finding)
-            application["sandboxes"][sandbox_guid]["unique_findings"].append(finding)
+            application["sandboxes"][finding["context_guid"]]["unique_findings"].append(finding)
         return application
 
     return None
@@ -56,16 +47,20 @@ def main():
             sys.exit(1)
 
         with open(sys.argv[1], "w", buffering=1) as output_file:
-            output_file.write("Application,Sandbox,Unique Mitigated Finding Count\n")
+            output_file.write("Application,Sandbox,Expiry Date,Unique Mitigated Finding Count\n")
             counter = 0
             applications = api.get_applications()
             futures = [pool.submit(process_application, x) for x in applications]
             for future in as_completed(futures):
                 application = future.result()
                 if application is not None:
+                    sandbox_xml = api.get_sandbox_list(application["id"])
+                    sandbox_dict = {sandbox.get("sandbox_id"): sandbox.get("expires") for sandbox in sandbox_xml}
                     for sandbox in application["sandboxes"].values():
                         if len(sandbox["unique_findings"]) != 0:
-                            output_file.write(f"{application['profile']['name']},{sandbox['name']},{len(sandbox['unique_findings'])}\n")
+                            app_name = application['profile']['name']
+                            sandbox_expiry = sandbox_dict[str(sandbox['id'])]
+                            output_file.write(f"{app_name},{sandbox['name']},{sandbox_expiry},{len(sandbox['unique_findings'])}\n")
                 counter += 1
                 print(f"\rApplications processed: {counter}", end="")
     except KeyboardInterrupt:
